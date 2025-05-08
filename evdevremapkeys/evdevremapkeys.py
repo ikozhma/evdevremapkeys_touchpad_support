@@ -23,19 +23,18 @@
 
 import argparse
 import asyncio
+import functools
+import signal
 from asyncio.events import AbstractEventLoop
 from collections.abc import Iterable
-import functools
 from pathlib import Path
-import signal
 from typing import Literal
 
-
 import evdev
-from evdev import ecodes, InputDevice, UInput, InputEvent
 import pyudev
-from xdg import BaseDirectory
 import yaml
+from evdev import InputDevice, InputEvent, UInput, ecodes
+from xdg import BaseDirectory
 
 DEFAULT_RATE = 0.1  # seconds
 repeat_tasks = {}
@@ -44,43 +43,50 @@ registered_devices = {}
 
 Remapping = dict[int, list[dict]]
 
-def satisfies_condition(device : InputDevice, buffered_events : list[InputEvent], condition : dict) -> bool:
-    #Codes:
+
+def satisfies_condition(
+    device: InputDevice, buffered_events: list[InputEvent], condition: dict
+) -> bool:
+    # Codes:
     # ABS_X = 0
     # ABS_Y = 1
     # ABS_MT_POSITION_X = 53
     # ABS_MT_POSITION_Y = 54
-    #Types:
+    # Types:
     # EV_ABS = 3
     x = device.absinfo(ecodes.ABS_X).value
     y = device.absinfo(ecodes.ABS_Y).value
-    #print(f"X={x} ; Y={y}")
+    # print(f"X={x} ; Y={y}")
     if x_ranges := condition.get("x_range"):
         if not (x_ranges[0] <= x <= x_ranges[1]):
             return False
     if y_ranges := condition.get("y_range"):
         if not (y_ranges[0] <= y <= y_ranges[1]):
             return False
-    #print(f"X={x} ; Y={y}")
+    # print(f"X={x} ; Y={y}")
     return True
 
-def get_remapping_for_buffer(buffer : list[InputEvent], remappings : Remapping
-                             ) -> dict|Literal[False]:
+
+def get_remapping_for_buffer(
+    buffer: list[InputEvent], remappings: Remapping
+) -> dict | Literal[False]:
     for buffered_event in buffer:
         if buffered_event.code in remappings:
             return remappings[buffered_event.code][0]
     return False
+
+
 async def handle_events(
-    input: InputDevice, output: UInput, remappings : Remapping, modifier_groups
+    input: InputDevice, output: UInput, remappings: Remapping, modifier_groups
 ):
     active_group = {}
-    event_buffer : list[InputEvent] = []
+    event_buffer: list[InputEvent] = []
 
     try:
-        event : InputEvent
+        event: InputEvent
         async for event in input.async_read_loop():
             if not active_group:
-                active_mappings : Remapping = remappings
+                active_mappings: Remapping = remappings
             else:
                 active_mappings = modifier_groups[active_group["name"]]
 
@@ -97,24 +103,30 @@ async def handle_events(
                     active_group = {}
             # Buffer events until we get a SYN event
             elif event.type == ecodes.EV_SYN:
-                to_remap : bool = False
+                to_remap: bool = False
                 # Process all buffered events
-                if active_remapping := get_remapping_for_buffer(event_buffer, active_mappings):
+                if active_remapping := get_remapping_for_buffer(
+                    event_buffer, active_mappings
+                ):
                     to_remap = True
                     if "condition" in active_remapping:
-                        to_remap = satisfies_condition(input, event_buffer, active_remapping["condition"])
+                        to_remap = satisfies_condition(
+                            input, event_buffer, active_remapping["condition"]
+                        )
 
                 if to_remap:
                     for buffered_event in event_buffer:
                         event_remapping = active_mappings.get(buffered_event.code, None)
                         if event_remapping:
-                            print(f"Remapped event_group: {[(ev.type, ev.code, ev.value) for ev in event_buffer]}")
+                            print(
+                                f"Remapped event_group: {[(ev.type, ev.code, ev.value) for ev in event_buffer]}"
+                            )
                             remap_event(output, buffered_event, event_remapping)
                         else:
                             output.write_event(buffered_event)
-                else: 
+                else:
                     [output.write_event(event) for event in event_buffer]
-                
+
                 output.syn()
                 event_buffer = []
             else:
@@ -122,7 +134,8 @@ async def handle_events(
                 event_buffer.append(event)
     finally:
         del registered_devices[input.path]
-        print("Unregistered: %r, %r, %r" % (input.name, input.path, input.phys),
+        print(
+            "Unregistered: %r, %r, %r" % (input.name, input.path, input.phys),
             flush=True,
         )
         input.close()
