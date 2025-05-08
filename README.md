@@ -2,6 +2,17 @@
 
 A daemon to remap key events on linux input devices
 
+## What this fork adds:
+
+On GNOME there is no way to disable middle-click emulation for my trackpad.
+And I every time accidentaly paste something when want to left-click.
+So I needed a tool to intercept and remap all BTN_LEFT events from bottom_middle area that libinput then converts to BTN_MIDDLE event.
+
+While making this work I added:
+ - Event buffer - before it sent events one at a time, so it won't register diagonal movements of the trackpad at all. Event buffer fixed the problem as it now sends events by frames, after SYN signal. 
+ - Added x/y ranges condition. I needed to define bottom_middle area of the trackpad. So in remappings you can now specify `condition` and inside `x_range` and/or `y_range`. There you specify in what range of trackpad your event should be remapped.  
+
+
 ## How to run from python:
 
 ```bash
