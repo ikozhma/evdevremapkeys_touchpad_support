@@ -2,6 +2,13 @@
 
 A daemon to remap key events on linux input devices
 
+## How to run from python:
+
+```bash
+sudo env "PATH=$PATH" uv run evdevremapkeys -f examples/disable_middle_click_config.yml   
+```
+
+
 ## Motivation
 
 The remapping of input key events is an problem, and one that has been solved
@@ -73,3 +80,6 @@ I'm not going to expand beyond key to key remappings.
 * [Python evdev binding](https://pypi.python.org/pypi/evdev) >= 0.7.0
 * [pyxdg](https://pypi.python.org/pypi/pyxdg) > 0.25
 * [PyYAML](https://pypi.python.org/pypi/PyYAML) >= 3.12
+
+
+
