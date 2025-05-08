@@ -28,10 +28,11 @@ from collections.abc import Iterable
 import functools
 from pathlib import Path
 import signal
+from typing import Literal
 
 
 import evdev
-from evdev import ecodes, InputDevice, UInput
+from evdev import ecodes, InputDevice, UInput, InputEvent
 import pyudev
 from xdg import BaseDirectory
 import yaml
@@ -41,15 +42,27 @@ repeat_tasks = {}
 remapped_tasks = {}
 registered_devices = {}
 
+Remapping = dict[int, list[dict]]
 
+
+
+def get_remapping_for_buffer(buffer : list[InputEvent], remappings : Remapping
+                             ) -> dict|Literal[False]:
+    for buffered_event in buffer:
+        if buffered_event.code in remappings:
+            return remappings[buffered_event.code][0]
+    return False
 async def handle_events(
-    input: InputDevice, output: UInput, remappings, modifier_groups
+    input: InputDevice, output: UInput, remappings : Remapping, modifier_groups
 ):
     active_group = {}
+    event_buffer : list[InputEvent] = []
+
     try:
+        event : InputEvent
         async for event in input.async_read_loop():
             if not active_group:
-                active_mappings = remappings
+                active_mappings : Remapping = remappings
             else:
                 active_mappings = modifier_groups[active_group["name"]]
 
@@ -64,16 +77,31 @@ async def handle_events(
                     active_group["code"] = event.code
                 elif event.value == 0:
                     active_group = {}
+            # Buffer events until we get a SYN event
+            elif event.type == ecodes.EV_SYN:
+                to_remap : bool = False
+                # Process all buffered events
+                if active_remapping := get_remapping_for_buffer(event_buffer, active_mappings):
+                    to_remap = True
+                if to_remap:
+                    for buffered_event in event_buffer:
+                        event_remapping = active_mappings.get(buffered_event.code, None)
+                        if event_remapping:
+                            print(f"Remapped event_group: {[(ev.type, ev.code, ev.value) for ev in event_buffer]}")
+                            remap_event(output, buffered_event, event_remapping)
+                        else:
+                            output.write_event(buffered_event)
+                else: 
+                    [output.write_event(event) for event in event_buffer]
+                
+                output.syn()
+                event_buffer = []
             else:
-                if event.code in active_mappings:
-                    remap_event(output, event, active_mappings[event.code])
-                else:
-                    output.write_event(event)
-                    output.syn()
+                # Add non-SYN events to the buffer
+                event_buffer.append(event)
     finally:
         del registered_devices[input.path]
-        print(
-            "Unregistered: %s, %s, %s" % (input.name, input.path, input.phys),
+        print("Unregistered: %r, %r, %r" % (input.name, input.path, input.phys),
             flush=True,
         )
         input.close()
