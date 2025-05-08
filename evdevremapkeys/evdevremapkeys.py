@@ -44,7 +44,25 @@ registered_devices = {}
 
 Remapping = dict[int, list[dict]]
 
-
+def satisfies_condition(device : InputDevice, buffered_events : list[InputEvent], condition : dict) -> bool:
+    #Codes:
+    # ABS_X = 0
+    # ABS_Y = 1
+    # ABS_MT_POSITION_X = 53
+    # ABS_MT_POSITION_Y = 54
+    #Types:
+    # EV_ABS = 3
+    x = device.absinfo(ecodes.ABS_X).value
+    y = device.absinfo(ecodes.ABS_Y).value
+    #print(f"X={x} ; Y={y}")
+    if x_ranges := condition.get("x_range"):
+        if not (x_ranges[0] <= x <= x_ranges[1]):
+            return False
+    if y_ranges := condition.get("y_range"):
+        if not (y_ranges[0] <= y <= y_ranges[1]):
+            return False
+    #print(f"X={x} ; Y={y}")
+    return True
 
 def get_remapping_for_buffer(buffer : list[InputEvent], remappings : Remapping
                              ) -> dict|Literal[False]:
@@ -83,6 +101,9 @@ async def handle_events(
                 # Process all buffered events
                 if active_remapping := get_remapping_for_buffer(event_buffer, active_mappings):
                     to_remap = True
+                    if "condition" in active_remapping:
+                        to_remap = satisfies_condition(input, event_buffer, active_remapping["condition"])
+
                 if to_remap:
                     for buffered_event in event_buffer:
                         event_remapping = active_mappings.get(buffered_event.code, None)
