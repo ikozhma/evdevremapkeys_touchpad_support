@@ -1,0 +1,13 @@
+devices:
+  - input_name: "ASCF1201:00 2808:0231 Touchpad"
+    output_name: disable-middle-click
+    remappings:
+      BTN_LEFT: 
+      - code: BTN_RIGHT
+        condition:
+          x_range: [1780, 3000]
+          y_range: [2800, 3100]
+      
+      
+# This config will block all BTN_LEFT events from the touchpad
+# from the certain x/y range (middle of the bottom zone)
